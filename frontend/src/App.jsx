@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Github, Linkedin, Mail, Phone, MapPin, ArrowUpRight, Download, ExternalLink, Menu, X, Code2, Database, Server, BriefcaseBusiness } from 'lucide-react';
 
-const API = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
+const API = import.meta.env.VITE_API_URL?.replace(/\/+$/, '');
 const projects = [
   { title: 'Bank Management System', status: 'Completed', stack: 'Python · Django · MySQL', text: 'A banking application to manage customer accounts, deposits, withdrawals and balance enquiries.', features: ['Customer account management', 'Deposit and withdrawal operations', 'Balance enquiry', 'Input validation and exception handling'] },
   { title: 'Job Portal Application', status: 'Completed', stack: 'Python · Django · React · MySQL', text: 'A full-stack job portal connecting job seekers and recruiters.', features: ['User registration and login', 'Job posting and search', 'Job applications', 'CRUD operations and REST APIs'] },
@@ -21,6 +21,7 @@ function App() {
     e.preventDefault();
     setFormState({loading:true, message:'', error:false});
     try {
+      if (!API) throw new Error('API is not configured. Set VITE_API_URL and restart the frontend.');
       const response = await fetch(`${API}/contact/`, {
         method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(form)
       });

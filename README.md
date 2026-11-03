@@ -1,112 +1,177 @@
 # Kapil Hande — Full-Stack Developer Portfolio
 
-A deployment-oriented portfolio starter built with:
-- Frontend: React + Vite + HTML + CSS + JavaScript
-- Backend: Python + Django + Django REST Framework
-- Database: SQLite for local development; MySQL is supported for deployment
-- Contact form: validated API endpoint; messages are stored in MySQL
-- Resume, certificates and profile photo: served from Django media/static assets
+React/Vite frontend with a Django REST Framework backend. The existing portfolio layout and features are preserved. The contact form stores submissions in the `ContactMessage` model.
 
-> The portfolio content uses the details supplied in the resume and conversation. Banking Management System and Job Portal are marked as completed because they appear in the resume. E-commerce, YouTube Clone and House Price Prediction are intentionally not presented as completed projects.
+## Project layout and API
 
-## 1. Requirements
+- `frontend/`: React application and public image/PDF assets.
+- `backend/`: Django project, REST API, admin, and migrations.
+- `GET /api/health/`: API health check.
+- `POST /api/contact/`: validate and store a contact message.
+- `/admin/`: Django administration.
 
-- Python 3.11+
-- Node.js 20+
-- MySQL 8+
-- Git (recommended)
+The public image and downloadable documents are bundled in `frontend/public/assets/`. The backend currently has no uploaded-file fields or uploads; Render's local filesystem is ephemeral, so it must not be used for persistent uploads.
 
-## 2. Database setup
+## Local development
 
-The app uses `backend/db.sqlite3` by default, so no database server or `.env` file is needed for local development. Django creates the tables when you run migrations.
+Requirements: Python 3.11+, Node.js 20+, and Git. SQLite is the local database by default.
 
-To use MySQL instead, open MySQL Workbench or MySQL CLI and run:
+### Django
 
-```sql
-CREATE DATABASE kapil_portfolio CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'portfolio_user'@'localhost' IDENTIFIED BY 'ChangeThisPassword!';
-GRANT ALL PRIVILEGES ON kapil_portfolio.* TO 'portfolio_user'@'localhost';
-FLUSH PRIVILEGES;
-```
-
-Copy `backend/.env.example` to `backend/.env`, set `DB_ENGINE=django.db.backends.mysql`, and replace the example database credentials with your own. Never publish real passwords.
-
-## 3. Run the Django backend
-
-```bash
+```powershell
 cd backend
 python -m venv .venv
-```
-
-Windows:
-```powershell
-.venv\Scripts\activate
-```
-
-macOS/Linux:
-```bash
-source .venv/bin/activate
-```
-
-Then:
-
-```bash
-pip install -r requirements.txt
-# For MySQL only, copy .env.example to .env and configure your credentials.
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 python manage.py migrate
-# Optional: create an admin login with `python manage.py createsuperuser`.
 python manage.py runserver
 ```
 
-Backend:
-- API health: http://127.0.0.1:8000/api/health/
-- Contact endpoint: http://127.0.0.1:8000/api/contact/
-- Django admin: http://127.0.0.1:8000/admin/
+In another terminal, create an admin account if needed:
 
-## 4. Run the React frontend
+```powershell
+cd backend
+.\.venv\Scripts\python.exe manage.py createsuperuser
+```
 
-Open another terminal:
+The API is at `http://127.0.0.1:8000/api/health/`; the admin is at `http://127.0.0.1:8000/admin/`.
 
-```bash
+### React/Vite
+
+```powershell
 cd frontend
+Copy-Item .env.example .env
 npm install
-copy .env.example .env       # Windows; on macOS/Linux use: cp .env.example .env
 npm run dev
 ```
 
-Open the URL printed by Vite (normally http://localhost:5173).
+The example frontend environment points to the local Django API. Set `VITE_API_URL` in `frontend/.env` to the API base URL ending in `/api`. Vite reads this at build time; restart the dev server after changing it.
 
-## 5. Production build
+## Free deployment overview
 
-```bash
-cd frontend
+- Frontend: Vercel free static hosting.
+- Backend: Render free web service.
+- Database: TiDB Cloud free MySQL-compatible tier (subject to TiDB's current limits and availability).
+- No custom domain is required; use the free `vercel.app` and `onrender.com` addresses.
+
+Free services can sleep, have resource limits, or change their terms. This repository has not been deployed to or tested against your hosting accounts.
+
+## 1. Push the project to GitHub
+
+Create or use your GitHub repository, then from the repository root:
+
+```powershell
+git add .
+git commit -m "Prepare portfolio for free deployment"
+git push origin main
+```
+
+If your default branch is not `main`, replace `main` with its name. Never commit `.env` files, real passwords, TiDB certificates containing private keys, or production secrets. `.env.example` files contain placeholders only.
+
+## 2. Create the TiDB Cloud database
+
+1. Sign in to TiDB Cloud and create a free MySQL-compatible cluster. Select its public endpoint and note the host, database name, username, and generated password.
+2. Create/select the application database and user in the TiDB SQL editor. Use the database name and credentials you will enter in Render; grant the user only the required database privileges.
+3. Configure the cluster's IP access list. Render's free service does not provide a fixed outbound IP address, so a narrow allowlist may not work. If TiDB requires a public CIDR allowlist, allowing `0.0.0.0/0` makes the database endpoint reachable from the internet; use a strong unique password and TLS, and understand this trade-off. Do not expose database credentials.
+4. Download the TiDB-provided CA certificate used by the cluster's TLS connection. Keep the certificate file available for the Render secret-file setup below.
+5. TiDB Cloud connection formats and free-tier limits can change; use the host, port, CA, and SQL instructions shown for your cluster.
+
+## 3. Deploy Django on Render
+
+1. In Render, create a **Blueprint** from the GitHub repository and select `render.yaml`, or create a Web Service manually with **Root Directory** `backend`, **Build Command** `bash build.sh`, and **Start Command** `gunicorn config.wsgi:application --bind 0.0.0.0:$PORT`.
+2. Use the free instance plan. The blueprint generates `SECRET_KEY`; provide the TiDB and frontend values requested for its `sync: false` variables.
+3. In the service's **Environment** settings, set:
+
+   | Variable | Value |
+   | --- | --- |
+   | `SECRET_KEY` | A long, random Django secret (generated by the blueprint, or generate one with `python -c "import secrets; print(secrets.token_urlsafe(50))"`). Never put this in GitHub or the frontend. |
+   | `DJANGO_DEBUG` | `False` |
+   | `DB_ENGINE` | `django.db.backends.mysql` |
+   | `DB_NAME` | TiDB database name |
+   | `DB_USER` | TiDB username |
+   | `DB_PASSWORD` | TiDB password |
+   | `DB_HOST` | TiDB public hostname, without a scheme |
+   | `DB_PORT` | TiDB port, usually `4000`; use the value shown by TiDB |
+   | `CORS_ALLOWED_ORIGINS` | Your exact Vercel origin, e.g. `https://your-project.vercel.app` (no path or trailing slash) |
+   | `FRONTEND_URL` | The same exact Vercel origin |
+
+4. In Render **Secret Files**, upload the TiDB CA certificate and set its mount path (for example, `/etc/secrets/tidb-ca.pem`). Set `DB_SSL_CA` to that exact mounted path. The production settings require this certificate and use it to configure the MySQL TLS connection.
+5. The build script installs the Python dependencies, collects Django static files for WhiteNoise (including Admin assets), and runs migrations. Check Render's build and runtime logs. The health check is `/api/health/`; after deploy, test `https://<your-service>.onrender.com/api/health/`.
+6. To create an admin account after the service is live, use Render's service Shell:
+
+   ```sh
+   python manage.py createsuperuser
+   ```
+
+   Visit `https://<your-service>.onrender.com/admin/`. Static admin assets are served by WhiteNoise.
+
+The settings also accept `DJANGO_SECRET_KEY` for compatibility with the earlier local example, `DJANGO_ALLOWED_HOSTS` as a comma-separated host list, and `RENDER_EXTERNAL_HOSTNAME` when supplied by Render. Do not set `DEBUG=True` in production.
+
+## 4. Deploy React on Vercel
+
+1. Import the GitHub repository into Vercel.
+2. Set **Root Directory** to `frontend`; Framework Preset should detect Vite. Use `npm install` as the install command, `npm run build` as the build command, and `dist` as the output directory.
+3. Add the environment variable `VITE_API_URL` with the full Render API base URL, e.g. `https://<your-service>.onrender.com/api` (not the health or contact URL). Add it for the Production environment and Preview too, if using previews.
+4. Deploy, copy the exact deployed Vercel origin (scheme plus hostname), then set it as both `CORS_ALLOWED_ORIGINS` and `FRONTEND_URL` on Render. Redeploy the backend if those values changed; Vite variables are embedded at build time, so redeploy the frontend after changing `VITE_API_URL`.
+5. Test the live contact form with valid input and confirm a `ContactMessage` appears in Django Admin.
+
+This app uses in-page section links, not a client-side router, so no `vercel.json` SPA rewrite is required. Vercel serves the existing public image and PDF assets directly.
+
+## Environment variables
+
+| Variable | Used by | Purpose |
+| --- | --- | --- |
+| `SECRET_KEY` (`DJANGO_SECRET_KEY` accepted for compatibility) | Backend | Django signing key; keep secret. |
+| `DJANGO_DEBUG` | Backend | Local default is `True`; production must be `False`. |
+| `DJANGO_ALLOWED_HOSTS` | Backend | Optional comma-separated allowed hosts; Render's runtime hostname is also accepted. |
+| `CORS_ALLOWED_ORIGINS` | Backend | Comma-separated browser origins permitted to call the API. |
+| `FRONTEND_URL` | Backend | Adds the deployed frontend origin to CORS. |
+| `DB_ENGINE` | Backend | `django.db.backends.sqlite3` locally or `django.db.backends.mysql` for TiDB. Production refuses SQLite. |
+| `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` | Backend | Database credentials and endpoint; never use these in Vite/Vercel. |
+| `DB_SSL_CA` | Backend | File path to the TiDB CA certificate mounted in Render Secret Files. Required in production. |
+| `VITE_API_URL` | Frontend | API base URL ending in `/api`; public, included in the frontend bundle, and not a place for secrets. |
+
+The local examples are `backend/.env.example` and `frontend/.env.example`. Copy them to `.env` for local work and replace placeholders as appropriate. Do not use a production `.env` in the browser app.
+
+## Migrations, static files, and media
+
+- Commit Django migration files alongside model changes. Render runs `python manage.py migrate --noinput` in `backend/build.sh`.
+- To inspect/apply migrations manually in a shell with the backend environment configured:
+
+  ```sh
+  python manage.py showmigrations
+  python manage.py migrate --noinput
+  ```
+
+- `python manage.py collectstatic --no-input` runs during the Render build. WhiteNoise serves Django Admin static assets.
+- The React app's static files are built to `frontend/dist` and served by Vercel.
+- There are currently no Django file-upload models. Files in `frontend/public/assets/` are bundled with the frontend; do not move persistent user uploads to Render's ephemeral filesystem. If uploads are added later, configure durable object storage.
+- The existing `ContactMessage` model and migration are unchanged. Existing SQLite data is not automatically copied to TiDB; export/import any data you need before switching databases.
+
+## Checks and troubleshooting
+
+From `backend/`:
+
+```powershell
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py migrate --check
+python manage.py test
+```
+
+From `frontend/`:
+
+```powershell
+npm install
 npm run build
 ```
 
-The production files are created in `frontend/dist/`. Deploy the React frontend to a static hosting provider and deploy Django to a Python-capable host. Provision a managed MySQL database and set environment variables on the backend host.
+- **DisallowedHost:** set `DJANGO_ALLOWED_HOSTS` to the Render hostname (host only), or check that Render provides `RENDER_EXTERNAL_HOSTNAME`.
+- **CORS error:** set the exact Vercel origin in both backend origin variables; origins include `https://` and must not include a path.
+- **Database connection/TLS error:** verify TiDB's public host and port, password, IP access list, mounted CA certificate, and `DB_SSL_CA` path. Check Render build/runtime logs.
+- **Missing Admin styles:** verify `collectstatic` succeeded and WhiteNoise is enabled; static files are collected on each Render build.
+- **Contact form does not reach the API:** set the Vercel `VITE_API_URL` to the Render API base ending in `/api`, then rebuild the frontend.
+- **First request is slow:** free Render services may spin down while idle and take time to wake up.
+- **Contact submissions are missing after a redeploy:** confirm the deployed app is connected to TiDB, not SQLite. Render's local filesystem is ephemeral.
 
-Set:
-- `DJANGO_DEBUG=False`
-- `DJANGO_SECRET_KEY` to a long random secret
-- `DJANGO_ALLOWED_HOSTS` to your backend domain
-- `CORS_ALLOWED_ORIGINS` to your frontend domain
-- `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_PORT`
-- `FRONTEND_URL` to your frontend domain
-
-For production, serve uploaded media through the hosting provider/object storage or configure a proper media server. Do not rely on Django's development media serving in production.
-
-## 6. Before publishing
-
-1. Review every project description and only claim features you actually implemented.
-2. Replace the sample profile image if you prefer another professional photo.
-3. Check that resume/certificate PDFs are the versions you want public.
-4. Confirm your phone number and email are intended to be public.
-5. Add actual GitHub and live-demo URLs for each completed project.
-6. Configure HTTPS and production environment variables.
-7. Test the contact form end-to-end.
-
-## 7. Notes
-
-- The contact form stores submissions in MySQL. It does not send email yet. Add SMTP credentials and an email service before promising email delivery.
-- The internship document included here is an **internship intent letter**, not a completion certificate.
-- This is a runnable starter project, not a deployment already performed on your hosting account.
+No hosted deployment or live cross-service test has been performed as part of these repository changes. Use the live health endpoint and contact form/Admin checks above after supplying your own provider accounts and credentials.
